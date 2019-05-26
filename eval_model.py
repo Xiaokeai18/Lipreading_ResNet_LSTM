@@ -2,15 +2,15 @@ import numpy as np
 import tensorflow as tf
 import pandas as pd
 from model import * #frontend_3D, backend_resnet34, concat_resnet_output, fully_connected_logits
-from tfpipeline import get_batch
-
+#from tfpipeline import get_batch
+import input_data
 #--------------------------------------------------------------------------------------------------------------------#
 # USER INPUT
 # dataset_dir= "/homes/mat10/Desktop/tfrecords_test/ABOUT"
 # data_info_dir = "/homes/mat10/Desktop/tfrecords_test"
-data_info_dir = "/data/mat10/ISO_Lipreading/data/LRW_TFRecords"
-val_data_info = pd.read_csv(data_info_dir + "/val_data_info.csv").sample(frac=1)
-train_data_info = pd.read_csv(data_info_dir + "/train_data_info.csv").sample(frac=1)
+# data_info_dir = "/data/mat10/ISO_Lipreading/data/LRW_TFRecords"
+# val_data_info = pd.read_csv(data_info_dir + "/val_data_info.csv").sample(frac=1)
+# train_data_info = pd.read_csv(data_info_dir + "/train_data_info.csv").sample(frac=1)
 options = {'is_training': False, 'batch_size': 100, 'num_classes': 500, 'num_epochs': 1,
            'crop_size': 112, 'horizontal_flip': False, "shuffle": False}
 # specify the model directory
@@ -21,7 +21,11 @@ savedir = "/data/mat10/ISO_Lipreading/models/evaluation"
 #--------------------------------------------------------------------------------------------------------------------#
 
 # print("Total number of train data: %d" % data_info.shape[0])
-number_of_steps_per_epoch = (val_data_info.shape[0] // options['batch_size'])
+test_list_file = 'test.list'
+num_test_videos = len(list(open(test_list_file,'r')))
+
+print("Total number of train data: %d" % num_test_videos)
+number_of_steps_per_epoch = num_test_videos // options['batch_size']
 # print("Total number of steps: %d" % number_of_steps)
 
 # modelid = 17

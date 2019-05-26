@@ -14,7 +14,7 @@ def frontend_3D(x_input, training=True):
     # First Convolution Layer - Image input, use 64 3D filters of size 5x5x5
     # shape of weights is (dx, dy, dz, #in_filters, #out_filters)
     n = np.prod([5, 7, 7, 64]) # std for weight initialization
-    W_conv1 = tf.get_variable("W_conv1", initializer=tf.truncated_normal(shape=[5, 7, 7, 1, 64], stddev=np.sqrt(2/n)))
+    W_conv1 = tf.get_variable("W_conv1", initializer=tf.truncated_normal(shape=[5, 7, 7, 3, 64],mean=0, stddev=np.sqrt(5e-2)))
     b_conv1 = tf.get_variable("b_conv1", initializer=tf.constant(0.1, shape=[64]))
     # apply first convolution
     z_conv1 = tf.nn.conv3d(x_input, W_conv1, strides=[1, 1, 2, 2, 1], padding='SAME') + b_conv1
