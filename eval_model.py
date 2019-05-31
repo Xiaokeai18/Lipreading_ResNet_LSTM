@@ -11,13 +11,13 @@ import input_data
 # data_info_dir = "/data/mat10/ISO_Lipreading/data/LRW_TFRecords"
 # val_data_info = pd.read_csv(data_info_dir + "/val_data_info.csv").sample(frac=1)
 # train_data_info = pd.read_csv(data_info_dir + "/train_data_info.csv").sample(frac=1)
-options = {'is_training': False, 'batch_size': 100, 'num_classes': 500, 'num_epochs': 1,
-           'crop_size': 112, 'horizontal_flip': False, "shuffle": False}
+options = {'is_training': False, 'batch_size': 8, 'num_classes': 5, 'num_epochs': 1,
+           'crop_size': 80, 'horizontal_flip': False, "shuffle": False}
 # specify the model directory
 # srcdir = "/data/mat10/ISO_Lipreading/models/saved_models_full"
-model_dir = "/data/mat10/ISO_Lipreading/models/saved_models_full/"
-model_ = model_dir + "model_full_epoch"
-savedir = "/data/mat10/ISO_Lipreading/models/evaluation"
+modeldir = "./saved_models_full"
+model = "model_full_epoch"
+savedir = "./saved_models_full/"
 #--------------------------------------------------------------------------------------------------------------------#
 
 # print("Total number of train data: %d" % data_info.shape[0])
@@ -30,60 +30,95 @@ number_of_steps_per_epoch = num_test_videos // options['batch_size']
 
 # modelid = 17
 # data_info = val_data_info
-for modelid in reversed(range(1, 17)):
+
+images_placeholder = tf.placeholder(tf.float32, shape=(options['batch_size'],24,options['crop_size']-20,options['crop_size'],3))
+labels_placeholder = tf.placeholder(tf.int64, shape=(options['batch_size']))
+
+prediction = frontend_3D(images_placeholder)
+prediction = backend_resnet34(prediction)
+prediction = blstm_2layer(prediction)
+prediction = fully_connected_logits(prediction, options['num_classes'])
+norm_score = tf.nn.softmax(prediction)
+
+#cross_entropy = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels_placeholder, logits=prediction))
+
+predicted_class = tf.argmax(prediction, axis=1)
+correct_prediction = tf.equal(labels_placeholder, predicted_class)
+accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+
+config = tf.ConfigProto(allow_soft_placement = True)
+config.gpu_options.allow_growth = True
+sess = tf.Session(config=config)
+
+for modelid in reversed(range(6, 10)):
 
     print("Evaluating model %d" % modelid)
-    model = model_ + str(modelid)
+    model = savedir + "model_full_epoch" + str(modelid)
 
-    for dataid, data_info in enumerate([train_data_info]):#, train_data_info]):
-        dataid = 1
-        paths = list(data_info['path'])[:25000]
-
-        videos, labels = get_batch(paths, options)
-
-        prediction = frontend_3D(videos)
-        prediction = backend_resnet34(prediction)
-        prediction = blstm_2layer(prediction)
-        prediction = fully_connected_logits(prediction, options['num_classes'])
+    sess.run(tf.global_variables_initializer())
 
 
-        cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=labels, logits=prediction))
-        true_class = tf.argmax(labels, axis=1)
-        predicted_class = tf.argmax(prediction, axis=1)
-        correct_prediction = tf.equal(true_class, predicted_class)
-        accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+    # Add ops to save and restore all the variables.
+    saver = tf.train.Saver()
+    saver.restore(sess, model)
+    print("Model restored.")
+    write_file = open("predict_ret.txt", "w+")
+    # metrics_ = []
+    # labels_ = []
+    # predicted_ = []
+    acc_cnt,acc5_cnt,cnt = 0,0,1
+    next_start_pos = 0
+    for step in range(number_of_steps_per_epoch):
+        test_images, test_labels, next_start_pos, _, valid_len = input_data.read_clip_and_label(
+                                filename=test_list_file,
+                                batch_size=options['batch_size'],
+                                num_frames_per_clip=24,
+                                crop_size=options['crop_size'],
+                                start_pos=next_start_pos,
+                                shuffle=True
+                                )
+        
+        predict_score = norm_score.eval(
+            session=sess,
+            feed_dict={images_placeholder: test_images}
+            )
+        acc5 = tf.nn.in_top_k(predict_score,test_labels,5)
+        top5_score = acc5.eval(session=sess,
+                    feed_dict={images_placeholder: test_images}
+                    )
+        for i in range(0, valid_len):
+            true_label = test_labels[i]
+            top1_predicted_label = np.argmax(predict_score[i])
+            # Write results: true label, class prob for true label, predicted label, class prob for predicted label
+            write_file.write('{}, {}, {}, {}\n'.format(
+                    true_label,
+                    predict_score[i][true_label],
+                    top1_predicted_label,
+                    predict_score[i][top1_predicted_label]))
+            cnt += 1
+            if top1_predicted_label == true_label:
+                acc_cnt += 1
+            if top5_score[i]:
+                acc5_cnt += 1      
 
-        sess = tf.Session()
+        print("model %d - step %d of %d" % (modelid, step, number_of_steps_per_epoch))  
 
-        sess.run(tf.initialize_all_variables())
+        #loss, acc = sess.run([cross_entropy, accuracy],feed_dict={images_placeholder: test_images,labels_placeholder: test_labels})
+        #lab, pred, loss, acc = sess.run([true_class, predicted_class, cross_entropy, accuracy])
+        #metrics_.append([loss, acc])
+        #labels_.append(lab)
+        #predicted_.append(pred)
+    print("Test Accuracy={}".format(float(acc_cnt)/float(cnt)))
+    print("Top-5 Accuracy={}".format(float(acc5_cnt)/float(cnt)))
+    write_file.close()
 
-        tf.train.start_queue_runners(sess=sess)
+    # metrics_ = np.array(metrics_)
+    # np.save(savedir + "./loss_accuracy_model%d_data%d.npy" % modelid, metrics_)
 
-        # Add ops to save and restore all the variables.
-        saver = tf.train.Saver()
-        saver.restore(sess, model)
-        print("Model restored.")
+    #labels_ = np.array(labels_)
+    #np.save(savedir + "/truelabels_model%d_data%d.npy" % (modelid, dataid), labels_)
 
-        metrics_ = []
-        labels_ = []
-        predicted_ = []
-        for i in range(number_of_steps_per_epoch):
-            print("model %d - dataid %d - step %d of %d" % (modelid, dataid, i, number_of_steps_per_epoch))
-            loss, acc = sess.run([cross_entropy, accuracy])
-            #lab, pred, loss, acc = sess.run([true_class, predicted_class, cross_entropy, accuracy])
-            metrics_.append([loss, acc])
-            #labels_.append(lab)
-            #predicted_.append(pred)
-
-        metrics_ = np.array(metrics_)
-        np.save(savedir + "/loss_accuracy_model%d_data%d.npy" % (modelid, dataid), metrics_)
-
-        #labels_ = np.array(labels_)
-        #np.save(savedir + "/truelabels_model%d_data%d.npy" % (modelid, dataid), labels_)
-
-        #predicted_ = np.array(predicted_)
-        #np.save(savedir + "/predictedlabels_model%d_data%d.npy" % (modelid, dataid), predicted_)
-
-        tf.reset_default_graph()
+    #predicted_ = np.array(predicted_)
+    #np.save(savedir + "/predictedlabels_model%d_data%d.npy" % (modelid, dataid), predicted_)
 
 

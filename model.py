@@ -33,7 +33,7 @@ def frontend_3D(x_input, training=True):
     h_pool1 = tf.nn.max_pool3d(h_conv1,
                                strides=[1, 1, 2, 2, 1],
                                ksize=[1, 3, 3, 3, 1],
-                               padding='SAME')
+                               padding='VALID')
     print(h_pool1.get_shape)
     print("shape after 1st pooling is %s" % h_pool1.get_shape)
     return h_pool1

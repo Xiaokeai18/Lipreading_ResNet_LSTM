@@ -4,6 +4,7 @@ import pandas as pd
 from model import *
 #from tfpipeline import get_batch
 import input_data
+import time
 
 #--------------------------------------------------------------------------------------------------------------------#
 # USER INPUT
@@ -15,7 +16,7 @@ import input_data
 # words_step1 = ['BRITISH', 'ATTACKS', 'HAVING', 'BIGGEST', 'REPORT', 'FORCES',
 #        'WANTED', 'HOURS', 'CONCERNS', 'INFORMATION']
 # train_data_info = train_data_info[train_data_info['word'].isin(words_step1)]
-train_options = {'batch_size': 8, 'num_classes': 500, 'num_epochs': 20,
+train_options = {'batch_size': 8, 'num_classes': 5, 'num_epochs': 10,
                  'crop_size': 80, 'horizontal_flip': True, 'shuffle': True}
 
 # MODEL RESTORE OPTIONS
@@ -88,6 +89,8 @@ with tf.Session(config=config) as sess:
     train_writer = tf.summary.FileWriter('./visual_logs/train', sess.graph)
     test_writer = tf.summary.FileWriter('./visual_logs/test', sess.graph)
 
+    last_time = time.time() 
+
     for epoch in range(start_epoch, start_epoch + train_options['num_epochs']):
         
         print("saving model for epoch %d - step %d" % (epoch, 0))
@@ -102,16 +105,18 @@ with tf.Session(config=config) as sess:
                                 crop_size=train_options['crop_size'],
                                 shuffle=True
                                 )
+
+                           
+
             _, loss = sess.run([train_step, cross_entropy],feed_dict={images_placeholder: train_images,labels_placeholder: train_labels})
             #loss = sess.run( cross_entropy,feed_dict={images_placeholder: train_images,labels_placeholder: train_labels})
-            
 
             if step%10 == 0:
                 summary,train_acc = sess.run([merged,accuracy],feed_dict={images_placeholder: train_images,labels_placeholder: train_labels})
                 train_writer.add_summary(summary, step+epoch*number_of_steps_per_epoch)
-                print("epoch: %d of %d - step: %d of %d - loss: %.4f - train accuracy: %.4f"
-                    % (epoch, train_options['num_epochs'], step, number_of_steps_per_epoch, loss, train_acc))
-
+                print("epoch: %d of %d - step: %d of %d - loss: %.4f - train accuracy: %.4f - duration: %.3f"
+                    % (epoch, train_options['num_epochs'], step, number_of_steps_per_epoch, loss, train_acc,(time.time()-last_time)))
+                last_time = time.time() 
                 #logfile.write('%d, %d, %.4f \n' % (epoch, step, train_acc))
                 val_images, val_labels, _, _, _ = input_data.read_clip_and_label(
                                 filename='test.list',
